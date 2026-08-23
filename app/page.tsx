@@ -21,7 +21,7 @@ export default function Home() {
     event.preventDefault(); setError(''); setResult(null); setLoading('analyze');
     try {
       const response = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) });
-      const data = await response.json();
+      const data = await response.json() as Analysis & { error?: string };
       if (!response.ok) throw new Error(data.error || '無法載入網站');
       setAnalysis(data); setFeedTitle(`${data.title} RSS`);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法分析網站'); }
@@ -33,7 +33,7 @@ export default function Home() {
     setError(''); setLoading('create');
     try {
       const response = await fetch('/api/feeds', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceUrl: analysis.sourceUrl, title: feedTitle, includeDescriptions, excludeWords }) });
-      const data = await response.json();
+      const data = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(data.error || '無法建立 Feed');
       setResult(data);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法建立 Feed'); }
