@@ -3,11 +3,11 @@ export const createFeedsTable = `
     id TEXT PRIMARY KEY NOT NULL,
     source_url TEXT NOT NULL,
     title TEXT NOT NULL,
-    max_items INTEGER NOT NULL DEFAULT 25,
+    max_items INTEGER NOT NULL DEFAULT 0,
     include_descriptions INTEGER NOT NULL DEFAULT 1,
     exclude_words TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL,
-    last_accessed_at INTEGER NOT NULL
+    created_at BIGINT NOT NULL,
+    last_accessed_at BIGINT NOT NULL
   )
 `;
 
@@ -17,8 +17,8 @@ export const createFeedItemsTable = `
     item_url TEXT NOT NULL,
     title TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    published_at INTEGER NOT NULL DEFAULT 0,
-    first_seen_at INTEGER NOT NULL,
+    published_at BIGINT NOT NULL DEFAULT 0,
+    first_seen_at BIGINT NOT NULL,
     PRIMARY KEY (feed_id, item_url)
   )
 `;
