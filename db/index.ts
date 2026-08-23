@@ -58,6 +58,22 @@ export async function touchFeed(id: string) {
   await sql().query('UPDATE feeds SET last_accessed_at = $1 WHERE id = $2', [Date.now(), id]);
 }
 
+export type FeedSummary = Pick<SavedFeed, 'id' | 'source_url' | 'title' | 'created_at' | 'last_accessed_at'> & {
+  item_count: number;
+};
+
+export async function listFeeds(): Promise<FeedSummary[]> {
+  await ensureSchema();
+  return await sql().query(`
+    SELECT feeds.id, feeds.source_url, feeds.title, feeds.created_at, feeds.last_accessed_at,
+           COUNT(feed_items.item_url)::INTEGER AS item_count
+    FROM feeds
+    LEFT JOIN feed_items ON feed_items.feed_id = feeds.id
+    GROUP BY feeds.id
+    ORDER BY feeds.last_accessed_at DESC, feeds.created_at DESC
+  `) as FeedSummary[];
+}
+
 type FeedItemInput = { title: string; url: string; description?: string; date?: string };
 
 export async function saveNewFeedItems(feedId: string, items: FeedItemInput[]): Promise<number> {

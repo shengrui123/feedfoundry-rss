@@ -1,10 +1,11 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 
 type Article = { title: string; url: string; description?: string; date?: string };
 type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number }; articles: Article[]; totalDetected: number };
 type Result = { title: string; rssUrl: string; sourceUrl: string; kind: 'official' | 'generated'; itemCount: number };
+type SavedFeedSummary = { id: string; title: string; sourceUrl: string; rssUrl: string; itemCount: number };
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -16,6 +17,18 @@ export default function Home() {
   const [loading, setLoading] = useState<'analyze' | 'create' | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [savedFeeds, setSavedFeeds] = useState<SavedFeedSummary[]>([]);
+  const [feedsLoading, setFeedsLoading] = useState(true);
+
+  const loadSavedFeeds = useCallback(async () => {
+    try {
+      const response = await fetch('/api/feeds', { cache: 'no-store' });
+      const data = await response.json() as { feeds?: SavedFeedSummary[] };
+      if (response.ok) setSavedFeeds(data.feeds || []);
+    } finally { setFeedsLoading(false); }
+  }, []);
+
+  useEffect(() => { void loadSavedFeeds(); }, [loadSavedFeeds]);
 
   async function analyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setError(''); setResult(null); setLoading('analyze');
@@ -36,6 +49,7 @@ export default function Home() {
       const data = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(data.error || '無法建立 Feed');
       setResult(data);
+      if (data.kind === 'generated') await loadSavedFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法建立 Feed'); }
     finally { setLoading(null); }
   }
@@ -69,6 +83,20 @@ export default function Home() {
             </div>
           ))}
           <div className="rail-help"><strong>如何運作？</strong><p>優先返回官方 RSS。只有找不到官方來源時，才根據頁面文章結構建立新的 Feed。</p></div>
+          <section className="saved-feeds" aria-labelledby="saved-feeds-title">
+            <div className="saved-feeds-head"><p className="rail-label" id="saved-feeds-title">我的 RSS</p><span>{savedFeeds.length}</span></div>
+            {feedsLoading ? <p className="saved-feeds-empty">正在載入…</p> : savedFeeds.length ? (
+              <div className="saved-feeds-list">{savedFeeds.map((feed) => {
+                let hostname = feed.sourceUrl;
+                try { hostname = new URL(feed.sourceUrl).hostname.replace(/^www\./, ''); } catch { /* Keep source URL. */ }
+                return <a href={feed.rssUrl} target="_blank" rel="noreferrer" key={feed.id} title={feed.sourceUrl}>
+                  <span className="saved-feed-icon">{feed.title.slice(0, 1).toUpperCase()}</span>
+                  <span><strong>{feed.title}</strong><small>{hostname} · {feed.itemCount} 篇</small></span>
+                  <b>↗</b>
+                </a>;
+              })}</div>
+            ) : <p className="saved-feeds-empty">尚未建立 RSS</p>}
+          </section>
         </aside>
 
         <section className="builder">

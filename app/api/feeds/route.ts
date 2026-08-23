@@ -1,9 +1,25 @@
-import { saveFeed, saveNewFeedItems } from '../../../db';
+import { listFeeds, saveFeed, saveNewFeedItems } from '../../../db';
 import { assertPublicUrl, extractArticles, findOfficialFeed, pageTitle, safeFetch } from '../../../lib/rss';
 
 async function feedId(sourceUrl: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sourceUrl));
   return [...new Uint8Array(digest)].slice(0, 10).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function GET(request: Request) {
+  try {
+    const origin = new URL(request.url).origin;
+    const feeds = await listFeeds();
+    return Response.json({ feeds: feeds.map((feed) => ({
+      id: feed.id,
+      title: feed.title,
+      sourceUrl: feed.source_url,
+      rssUrl: `${origin}/feeds/${feed.id}.xml`,
+      itemCount: Number(feed.item_count),
+    })) }, { headers: { 'cache-control': 'no-store' } });
+  } catch (cause) {
+    return Response.json({ error: cause instanceof Error ? cause.message : '無法載入 RSS 列表' }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
