@@ -1,4 +1,4 @@
-import { getFeed, touchFeed } from '../../../db';
+import { getFeed, listFeedItems, saveNewFeedItems, touchFeed } from '../../../db';
 import { buildRss, extractArticles, inspectFeed, safeFetch } from '../../../lib/rss';
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
@@ -9,8 +9,9 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     const feed = await getFeed(id);
     if (!feed) return new Response('Feed not found', { status: 404 });
     const page = await safeFetch(feed.source_url);
+    await saveNewFeedItems(id, extractArticles(page.text, page.url));
     const excluded = feed.exclude_words.toLowerCase().split(/[,，\n]/).map((word) => word.trim()).filter(Boolean);
-    let articles = extractArticles(page.text, page.url).filter((article) => !excluded.some((word) => article.title.toLowerCase().includes(word)));
+    let articles = (await listFeedItems(id)).filter((article) => !excluded.some((word) => article.title.toLowerCase().includes(word)));
     articles = articles.map((article) => feed.include_descriptions ? article : { ...article, description: '' });
     if (!articles.length) throw new Error('來源目前沒有符合規則的文章');
     const xml = buildRss(feed.title, page.url, articles);

@@ -119,7 +119,7 @@ export default function Home() {
 
           {result && (
             <div className="success-panel">
-              <div className="success-mark">✓</div><span className="kicker">FEED READY</span><h1>你的 RSS 已經可以訂閱。</h1><p>{result.kind === 'official' ? '此網站提供了有效的官方 RSS，我們直接保留原始來源。' : '設定已保存。每次閱讀器存取時，都會重新抓取來源並套用你的規則。'}</p>
+              <div className="success-mark">✓</div><span className="kicker">FEED READY</span><h1>你的 RSS 已經可以訂閱。</h1><p>{result.kind === 'official' ? '此網站提供了有效的官方 RSS，我們直接保留原始來源。' : '設定已保存。每次閱讀器存取時都會檢查來源，只追加新文章，既有項目會繼續保留。'}</p>
               <div className="feed-output"><label>RSS FEED URL</label><div><input readOnly value={result.rssUrl} onFocus={(event) => event.currentTarget.select()} /><button onClick={copyFeed} type="button">{copied ? '已複製 ✓' : '複製連結'}</button></div></div>
               <div className="success-actions"><a href={result.rssUrl} target="_blank" rel="noreferrer">打開 XML ↗</a><button type="button" onClick={reset}>＋ 建立另一個 Feed</button></div>
               <div className="feed-facts"><span><b>固定</b>RSS 連結</span><span><b>{result.kind === 'official' ? '官方' : '即時'}</b>來源更新</span><span><b>RSS 2.0</b>輸出格式</span></div>

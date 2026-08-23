@@ -1,4 +1,4 @@
-import { saveFeed } from '../../../db';
+import { saveFeed, saveNewFeedItems } from '../../../db';
 import { assertPublicUrl, extractArticles, findOfficialFeed, pageTitle, safeFetch } from '../../../lib/rss';
 
 async function feedId(sourceUrl: string): Promise<string> {
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     const excludeWords = String(body.excludeWords || '').trim().slice(0, 300);
     const id = await feedId(page.url);
     await saveFeed({ id, source_url: page.url, title, max_items: 0, include_descriptions: body.includeDescriptions === false ? 0 : 1, exclude_words: excludeWords });
+    await saveNewFeedItems(id, articles);
     const origin = new URL(request.url).origin;
     return Response.json({ title, rssUrl: `${origin}/feeds/${id}.xml`, sourceUrl: page.url, kind: 'generated', itemCount: articles.length });
   } catch (cause) {

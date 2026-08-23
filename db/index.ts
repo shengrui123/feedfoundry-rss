@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { createFeedsTable } from './schema';
+import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable } from './schema';
 
 export type SavedFeed = {
   id: string;
@@ -18,7 +18,12 @@ function db(): D1Database {
 }
 
 async function ensureSchema() {
-  await db().prepare(createFeedsTable).run();
+  const database = db();
+  await database.batch([
+    database.prepare(createFeedsTable),
+    database.prepare(createFeedItemsTable),
+    database.prepare(createFeedItemsIndex),
+  ]);
 }
 
 export async function saveFeed(input: Omit<SavedFeed, 'created_at' | 'last_accessed_at'>) {
@@ -43,4 +48,47 @@ export async function getFeed(id: string): Promise<SavedFeed | null> {
 
 export async function touchFeed(id: string) {
   await db().prepare('UPDATE feeds SET last_accessed_at = ? WHERE id = ?').bind(Date.now(), id).run();
+}
+
+type FeedItemInput = { title: string; url: string; description?: string; date?: string };
+
+export async function saveNewFeedItems(feedId: string, items: FeedItemInput[]): Promise<number> {
+  await ensureSchema();
+  const database = db();
+  const firstSeenAt = Date.now();
+  let inserted = 0;
+  for (let offset = 0; offset < items.length; offset += 50) {
+    const statements = items.slice(offset, offset + 50).map((item) => database.prepare(`
+      INSERT OR IGNORE INTO feed_items
+        (feed_id, item_url, title, description, published_at, first_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      feedId,
+      item.url,
+      item.title,
+      item.description || '',
+      item.date && !Number.isNaN(Date.parse(item.date)) ? Date.parse(item.date) : 0,
+      firstSeenAt,
+    ));
+    const results = await database.batch(statements);
+    inserted += results.reduce((total, result) => total + Number(result.meta.changes || 0), 0);
+  }
+  return inserted;
+}
+
+export async function listFeedItems(feedId: string): Promise<FeedItemInput[]> {
+  await ensureSchema();
+  const result = await db().prepare(`
+    SELECT item_url, title, description, published_at
+    FROM feed_items
+    WHERE feed_id = ?
+    ORDER BY CASE WHEN published_at > 0 THEN published_at ELSE first_seen_at END DESC,
+             first_seen_at DESC
+  `).bind(feedId).all<{ item_url: string; title: string; description: string; published_at: number }>();
+  return result.results.map((item) => ({
+    url: item.item_url,
+    title: item.title,
+    description: item.description,
+    date: item.published_at > 0 ? new Date(item.published_at).toISOString() : undefined,
+  }));
 }
