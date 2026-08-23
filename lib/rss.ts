@@ -3,6 +3,7 @@ const COMMON_FEED_PATHS = ['/feed', '/feed/', '/rss', '/rss/', '/rss.xml', '/fee
 
 export type Article = { title: string; url: string; description?: string; date?: string };
 export type FeedInfo = { title: string; itemCount: number; url: string };
+export type SourcePage = { text: string; url: string; contentType: string; kind: 'html' | 'sitemap' };
 
 export function assertPublicUrl(value: unknown): URL {
   if (typeof value !== 'string' || value.length > 2048) throw new Error('請輸入有效網址');
@@ -52,6 +53,40 @@ export async function safeFetch(input: string, accept = 'text/html,application/x
     return { text: await readLimited(response), url: response.url || url.href, contentType: response.headers.get('content-type') || '' };
   }
   throw new Error('來源重新導向次數過多');
+}
+
+function sitemapCandidates(source: URL): string[] {
+  const candidates: string[] = [];
+  if (source.hostname === 'reuters.com' || source.hostname.endsWith('.reuters.com')) {
+    candidates.push(new URL('/arc/outboundfeeds/news-sitemap/?outputType=xml', source.origin).href);
+  }
+  for (const path of ['/news-sitemap.xml', '/sitemap-news.xml', '/sitemap_news.xml', '/sitemap.xml']) {
+    candidates.push(new URL(path, source.origin).href);
+  }
+  return [...new Set(candidates)];
+}
+
+export async function fetchSource(input: string): Promise<SourcePage> {
+  const source = assertPublicUrl(input);
+  let pageError: unknown;
+  try {
+    const page = await safeFetch(source.href);
+    if (/html/i.test(page.contentType) || /<html\b/i.test(page.text)) return { ...page, kind: 'html' };
+    pageError = new Error('輸入網址不是 HTML 網頁');
+  } catch (cause) {
+    pageError = cause;
+  }
+
+  for (const candidate of sitemapCandidates(source)) {
+    try {
+      const sitemap = await safeFetch(candidate, 'application/xml,text/xml,application/rss+xml');
+      if (extractSitemapArticles(sitemap.text, source.href).length) {
+        return { text: sitemap.text, url: source.href, contentType: sitemap.contentType, kind: 'sitemap' };
+      }
+    } catch { /* Try the next public sitemap. */ }
+  }
+
+  throw pageError instanceof Error ? pageError : new Error('無法讀取來源網站');
 }
 
 function decodeEntities(value: string): string {
@@ -130,6 +165,7 @@ function visitJsonLd(value: unknown, items: Map<string, Article>, pageUrl: URL) 
 }
 
 export function extractArticles(html: string, pageUrlString: string): Article[] {
+  if (/<urlset\b/i.test(html)) return extractSitemapArticles(html, pageUrlString);
   const pageUrl = new URL(pageUrlString);
   const items = new Map<string, Article>();
   for (const match of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
@@ -145,6 +181,19 @@ export function extractArticles(html: string, pageUrlString: string): Article[] 
   return [...items.values()];
 }
 
+export function extractSitemapArticles(xml: string, pageUrlString: string): Article[] {
+  const pageUrl = new URL(pageUrlString);
+  const items = new Map<string, Article>();
+  for (const match of xml.matchAll(/<url\b[^>]*>([\s\S]*?)<\/url>/gi)) {
+    const block = match[1];
+    const url = decodeEntities(xmlText(block.match(/<loc\b[^>]*>([\s\S]*?)<\/loc>/i)?.[1] || ''));
+    const title = decodeEntities(xmlText(block.match(/<(?:news:)?title\b[^>]*>([\s\S]*?)<\/(?:news:)?title>/i)?.[1] || ''));
+    const date = decodeEntities(xmlText(block.match(/<(?:news:publication_date|lastmod)\b[^>]*>([\s\S]*?)<\/(?:news:publication_date|lastmod)>/i)?.[1] || ''));
+    if (url && title) addArticle(items, pageUrl, { title, url, date });
+  }
+  return [...items.values()];
+}
+
 export function buildRss(title: string, sourceUrl: string, articles: Article[]): string {
   const items = articles.map((article) => `\n    <item><title>${xmlEscape(article.title)}</title><link>${xmlEscape(article.url)}</link><guid isPermaLink="true">${xmlEscape(article.url)}</guid>${article.date && !Number.isNaN(Date.parse(article.date)) ? `<pubDate>${new Date(article.date).toUTCString()}</pubDate>` : ''}${article.description ? `<description>${xmlEscape(article.description)}</description>` : ''}</item>`).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel><title>${xmlEscape(title)}</title><link>${xmlEscape(sourceUrl)}</link><description>${xmlEscape(`FeedFoundry 從 ${new URL(sourceUrl).hostname} 公開頁面生成`)}</description><lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}\n</channel></rss>`;
@@ -152,7 +201,8 @@ export function buildRss(title: string, sourceUrl: string, articles: Article[]):
 
 export function pageTitle(html: string, fallbackUrl: string): string {
   const og = html.match(/<meta\b[^>]*property=["']og:site_name["'][^>]*>/i)?.[0];
-  const title = og ? attr(og, 'content') : stripHtml(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '');
+  const sitemapName = decodeEntities(xmlText(html.match(/<news:name\b[^>]*>([\s\S]*?)<\/news:name>/i)?.[1] || ''));
+  const title = og ? attr(og, 'content') : stripHtml(html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '') || sitemapName;
   return title || new URL(fallbackUrl).hostname;
 }
 

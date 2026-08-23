@@ -1,5 +1,5 @@
 import { listFeeds, saveFeed, saveNewFeedItems } from '../../../db';
-import { assertPublicUrl, extractArticles, findOfficialFeed, pageTitle, safeFetch } from '../../../lib/rss';
+import { assertPublicUrl, extractArticles, fetchSource, findOfficialFeed, pageTitle } from '../../../lib/rss';
 
 async function feedId(sourceUrl: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sourceUrl));
@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as { sourceUrl?: unknown; title?: unknown; includeDescriptions?: unknown; excludeWords?: unknown };
     const source = assertPublicUrl(body.sourceUrl).href;
-    const page = await safeFetch(source);
-    const official = await findOfficialFeed(page.text, page.url);
+    const page = await fetchSource(source);
+    const official = page.kind === 'html' ? await findOfficialFeed(page.text, page.url) : null;
     if (official) return Response.json({ title: official.title, rssUrl: official.url, sourceUrl: page.url, kind: 'official', itemCount: official.itemCount });
     const articles = extractArticles(page.text, page.url);
     if (!articles.length) throw new Error('來源頁面目前沒有可辨識的文章');

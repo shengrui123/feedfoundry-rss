@@ -1,5 +1,5 @@
 import { getFeed, listFeedItems, saveNewFeedItems, touchFeed } from '../../../db';
-import { buildRss, extractArticles, inspectFeed, safeFetch } from '../../../lib/rss';
+import { buildRss, extractArticles, fetchSource, inspectFeed } from '../../../lib/rss';
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -8,7 +8,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (!/^[a-f0-9]{20}$/.test(id)) throw new Error('Feed ID 不正確');
     const feed = await getFeed(id);
     if (!feed) return new Response('Feed not found', { status: 404 });
-    const page = await safeFetch(feed.source_url);
+    const page = await fetchSource(feed.source_url);
     await saveNewFeedItems(id, extractArticles(page.text, page.url));
     const excluded = feed.exclude_words.toLowerCase().split(/[,，\n]/).map((word) => word.trim()).filter(Boolean);
     let articles = (await listFeedItems(id)).filter((article) => !excluded.some((word) => article.title.toLowerCase().includes(word)));
