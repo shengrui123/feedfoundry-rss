@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     if (!articles.length) throw new Error('來源頁面目前沒有可辨識的文章');
     const xml = buildRss(`${pageTitle(page.text, page.url)}－FeedFoundry`, page.url, articles);
     if (!inspectFeed(xml)) throw new Error('生成結果未通過 RSS 驗證');
-    return new Response(xml, { headers: { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=900', 'x-content-type-options': 'nosniff' } });
+    return new Response(xml, { headers: { 'content-type': 'application/rss+xml; charset=utf-8', 'cache-control': 'no-store, no-cache, must-revalidate', 'x-content-type-options': 'nosniff' } });
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : '無法生成 RSS';
     return new Response(`RSS generation failed: ${message}`, { status: 400, headers: { 'content-type': 'text/plain; charset=utf-8' } });

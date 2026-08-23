@@ -11,7 +11,6 @@ export default function Home() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [result, setResult] = useState<Result | null>(null);
   const [feedTitle, setFeedTitle] = useState('');
-  const [maxItems, setMaxItems] = useState(25);
   const [includeDescriptions, setIncludeDescriptions] = useState(true);
   const [excludeWords, setExcludeWords] = useState('');
   const [loading, setLoading] = useState<'analyze' | 'create' | null>(null);
@@ -33,7 +32,7 @@ export default function Home() {
     if (!analysis) return;
     setError(''); setLoading('create');
     try {
-      const response = await fetch('/api/feeds', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceUrl: analysis.sourceUrl, title: feedTitle, maxItems, includeDescriptions, excludeWords }) });
+      const response = await fetch('/api/feeds', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceUrl: analysis.sourceUrl, title: feedTitle, includeDescriptions, excludeWords }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '無法建立 Feed');
       setResult(data);
@@ -109,7 +108,6 @@ export default function Home() {
                 <h2>{analysis.official ? '確認官方來源' : '設定輸出內容'}</h2>
                 {!analysis.official && <>
                   <label>Feed 名稱<input value={feedTitle} onChange={(event) => setFeedTitle(event.target.value)} maxLength={120} /></label>
-                  <label>最多文章數<select value={maxItems} onChange={(event) => setMaxItems(Number(event.target.value))}><option value="10">10 篇</option><option value="25">25 篇</option><option value="40">40 篇</option><option value="60">60 篇</option></select></label>
                   <label>排除標題關鍵字<textarea value={excludeWords} onChange={(event) => setExcludeWords(event.target.value)} placeholder="廣告, 贊助, 直播" rows={3} /></label>
                   <label className="switch"><input type="checkbox" checked={includeDescriptions} onChange={(event) => setIncludeDescriptions(event.target.checked)} /><span />包含文章摘要</label>
                 </>}
@@ -124,7 +122,7 @@ export default function Home() {
               <div className="success-mark">✓</div><span className="kicker">FEED READY</span><h1>你的 RSS 已經可以訂閱。</h1><p>{result.kind === 'official' ? '此網站提供了有效的官方 RSS，我們直接保留原始來源。' : '設定已保存。每次閱讀器存取時，都會重新抓取來源並套用你的規則。'}</p>
               <div className="feed-output"><label>RSS FEED URL</label><div><input readOnly value={result.rssUrl} onFocus={(event) => event.currentTarget.select()} /><button onClick={copyFeed} type="button">{copied ? '已複製 ✓' : '複製連結'}</button></div></div>
               <div className="success-actions"><a href={result.rssUrl} target="_blank" rel="noreferrer">打開 XML ↗</a><button type="button" onClick={reset}>＋ 建立另一個 Feed</button></div>
-              <div className="feed-facts"><span><b>{result.itemCount}</b>目前項目</span><span><b>{result.kind === 'official' ? '官方' : '15 min'}</b>來源更新</span><span><b>RSS 2.0</b>輸出格式</span></div>
+              <div className="feed-facts"><span><b>固定</b>RSS 連結</span><span><b>{result.kind === 'official' ? '官方' : '即時'}</b>來源更新</span><span><b>RSS 2.0</b>輸出格式</span></div>
             </div>
           )}
           {error && <div className="error-toast" role="alert"><b>無法完成</b><span>{error}</span><button type="button" onClick={() => setError('')}>×</button></div>}

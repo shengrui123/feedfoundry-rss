@@ -142,7 +142,7 @@ export function extractArticles(html: string, pageUrlString: string): Article[] 
       if (href) addArticle(items, pageUrl, { title: link[2], url: href, description: stripHtml(region.match(/<p\b[^>]*>([\s\S]*?)<\/p>/i)?.[1] || '') });
     }
   }
-  return [...items.values()].slice(0, 60);
+  return [...items.values()];
 }
 
 export function buildRss(title: string, sourceUrl: string, articles: Article[]): string {
