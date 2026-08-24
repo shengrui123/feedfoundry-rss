@@ -1,6 +1,8 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import AuthControls from './auth-controls';
 
 type Article = { title: string; url: string; description?: string; date?: string };
 type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
@@ -87,7 +89,7 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <button className="logo" type="button" onClick={reset}><span>◔</span> FeedFoundry</button>
-        <div className="top-status"><i /> Feed engine online</div>
+        <div className="top-actions"><AuthControls /><div className="top-status"><i /> Feed engine online</div></div>
       </header>
 
       <div className="workspace">
@@ -104,7 +106,7 @@ export default function Home() {
           ))}
           <div className="rail-help"><strong>如何運作？</strong><p>優先返回官方 RSS。只有找不到官方來源時，才根據頁面文章結構建立新的 Feed。</p></div>
           <section className="saved-feeds" aria-labelledby="saved-feeds-title">
-            <div className="saved-feeds-head"><p className="rail-label" id="saved-feeds-title">我的 RSS</p><span>{savedFeeds.length}</span></div>
+            <div className="saved-feeds-head"><p className="rail-label" id="saved-feeds-title">我的 RSS</p><Link href="/feeds">顯示全部</Link><span>{savedFeeds.length}</span></div>
             {feedsLoading ? <p className="saved-feeds-empty">正在載入…</p> : savedFeeds.length ? (
               <div className="saved-feeds-list">{savedFeeds.map((feed) => {
                 let hostname = feed.sourceUrl;
