@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 type Article = { title: string; url: string; description?: string; date?: string };
 type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
 type Result = { title: string; rssUrl: string; sourceUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
-type SavedFeedSummary = { id: string; title: string; sourceUrl: string; rssUrl: string; itemCount: number };
+type SavedFeedSummary = { id: string; title: string; sourceUrl: string; rssUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -49,7 +49,7 @@ export default function Home() {
       const data = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(data.error || '無法建立 Feed');
       setResult(data);
-      if (data.kind === 'generated') await loadSavedFeeds();
+      await loadSavedFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法建立 Feed'); }
     finally { setLoading(null); }
   }
@@ -91,7 +91,7 @@ export default function Home() {
                 try { hostname = new URL(feed.sourceUrl).hostname.replace(/^www\./, ''); } catch { /* Keep source URL. */ }
                 return <a href={feed.rssUrl} target="_blank" rel="noreferrer" key={feed.id} title={feed.sourceUrl}>
                   <span className="saved-feed-icon">{feed.title.slice(0, 1).toUpperCase()}</span>
-                  <span><strong>{feed.title}</strong><small>{hostname} · {feed.itemCount} 篇</small></span>
+                  <span><strong>{feed.title}</strong><small>{hostname} · {feed.kind === 'official' ? '官方' : feed.kind === 'search' ? '公開索引' : '生成'} · {feed.itemCount} 篇</small></span>
                   <b>↗</b>
                 </a>;
               })}</div>

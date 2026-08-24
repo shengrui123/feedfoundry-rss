@@ -6,10 +6,19 @@ export const createFeedsTable = `
     max_items INTEGER NOT NULL DEFAULT 0,
     include_descriptions INTEGER NOT NULL DEFAULT 1,
     exclude_words TEXT NOT NULL DEFAULT '',
+    feed_kind TEXT NOT NULL DEFAULT 'generated',
+    feed_url TEXT NOT NULL DEFAULT '',
+    item_count INTEGER NOT NULL DEFAULT 0,
     created_at BIGINT NOT NULL,
     last_accessed_at BIGINT NOT NULL
   )
 `;
+
+export const upgradeFeedsTable = [
+  `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS feed_kind TEXT NOT NULL DEFAULT 'generated'`,
+  `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS feed_url TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS item_count INTEGER NOT NULL DEFAULT 0`,
+];
 
 export const createFeedItemsTable = `
   CREATE TABLE IF NOT EXISTS feed_items (

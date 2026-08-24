@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable } from './schema';
+import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable, upgradeFeedsTable } from './schema';
 
 export type SavedFeed = {
   id: string;
@@ -8,6 +8,9 @@ export type SavedFeed = {
   max_items: number;
   include_descriptions: number;
   exclude_words: string;
+  feed_kind: 'official' | 'search' | 'generated';
+  feed_url: string;
+  item_count: number;
   created_at: number;
   last_accessed_at: number;
 };
@@ -24,6 +27,7 @@ async function ensureSchema() {
   schemaReady ??= (async () => {
     const database = sql();
     await database.query(createFeedsTable);
+    for (const statement of upgradeFeedsTable) await database.query(statement);
     await database.query(createFeedItemsTable);
     await database.query(createFeedItemsIndex);
   })().catch((error) => {
@@ -37,15 +41,18 @@ export async function saveFeed(input: Omit<SavedFeed, 'created_at' | 'last_acces
   await ensureSchema();
   const now = Date.now();
   await sql().query(`
-    INSERT INTO feeds (id, source_url, title, max_items, include_descriptions, exclude_words, created_at, last_accessed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO feeds (id, source_url, title, max_items, include_descriptions, exclude_words, feed_kind, feed_url, item_count, created_at, last_accessed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     ON CONFLICT(id) DO UPDATE SET
       title = EXCLUDED.title,
       max_items = EXCLUDED.max_items,
       include_descriptions = EXCLUDED.include_descriptions,
       exclude_words = EXCLUDED.exclude_words,
+      feed_kind = EXCLUDED.feed_kind,
+      feed_url = EXCLUDED.feed_url,
+      item_count = EXCLUDED.item_count,
       last_accessed_at = EXCLUDED.last_accessed_at
-  `, [input.id, input.source_url, input.title, input.max_items, input.include_descriptions, input.exclude_words, now, now]);
+  `, [input.id, input.source_url, input.title, input.max_items, input.include_descriptions, input.exclude_words, input.feed_kind, input.feed_url, input.item_count, now, now]);
 }
 
 export async function getFeed(id: string): Promise<SavedFeed | null> {
@@ -58,15 +65,19 @@ export async function touchFeed(id: string) {
   await sql().query('UPDATE feeds SET last_accessed_at = $1 WHERE id = $2', [Date.now(), id]);
 }
 
-export type FeedSummary = Pick<SavedFeed, 'id' | 'source_url' | 'title' | 'created_at' | 'last_accessed_at'> & {
+export type FeedSummary = Pick<SavedFeed, 'id' | 'source_url' | 'title' | 'feed_kind' | 'feed_url' | 'created_at' | 'last_accessed_at'> & {
   item_count: number;
 };
 
 export async function listFeeds(): Promise<FeedSummary[]> {
   await ensureSchema();
   return await sql().query(`
-    SELECT feeds.id, feeds.source_url, feeds.title, feeds.created_at, feeds.last_accessed_at,
-           COUNT(feed_items.item_url)::INTEGER AS item_count
+    SELECT feeds.id, feeds.source_url, feeds.title, feeds.feed_kind, feeds.feed_url,
+           feeds.created_at, feeds.last_accessed_at,
+           CASE WHEN feeds.feed_kind = 'generated'
+             THEN COUNT(feed_items.item_url)::INTEGER
+             ELSE feeds.item_count
+           END AS item_count
     FROM feeds
     LEFT JOIN feed_items ON feed_items.feed_id = feeds.id
     GROUP BY feeds.id
