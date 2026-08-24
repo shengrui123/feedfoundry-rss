@@ -19,6 +19,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [savedFeeds, setSavedFeeds] = useState<SavedFeedSummary[]>([]);
   const [feedsLoading, setFeedsLoading] = useState(true);
+  const [deletingFeedId, setDeletingFeedId] = useState<string | null>(null);
 
   const loadSavedFeeds = useCallback(async () => {
     try {
@@ -60,6 +61,25 @@ export default function Home() {
     window.setTimeout(() => setCopied(false), 1800);
   }
 
+  async function removeFeed(feed: SavedFeedSummary) {
+    if (!window.confirm(`確定要刪除「${feed.title}」嗎？${feed.kind === 'generated' ? '\n已保存的文章也會一併刪除。' : ''}`)) return;
+    let deleteToken = window.sessionStorage.getItem('feed-delete-token') || '';
+    if (!deleteToken) {
+      deleteToken = window.prompt('請輸入刪除密碼')?.trim() || '';
+      if (!deleteToken) return;
+      window.sessionStorage.setItem('feed-delete-token', deleteToken);
+    }
+    setError(''); setDeletingFeedId(feed.id);
+    try {
+      const response = await fetch(`/api/feeds?id=${encodeURIComponent(feed.id)}`, { method: 'DELETE', headers: { 'x-feed-delete-token': deleteToken } });
+      const data = await response.json() as { deleted?: boolean; error?: string };
+      if (response.status === 401) window.sessionStorage.removeItem('feed-delete-token');
+      if (!response.ok) throw new Error(data.error || '無法刪除 RSS');
+      setSavedFeeds((current) => current.filter((item) => item.id !== feed.id));
+    } catch (cause) { setError(cause instanceof Error ? cause.message : '無法刪除 RSS'); }
+    finally { setDeletingFeedId(null); }
+  }
+
   function reset() { setAnalysis(null); setResult(null); setError(''); setUrl(''); }
   const activeStep = result ? 3 : analysis ? 2 : 1;
 
@@ -89,11 +109,14 @@ export default function Home() {
               <div className="saved-feeds-list">{savedFeeds.map((feed) => {
                 let hostname = feed.sourceUrl;
                 try { hostname = new URL(feed.sourceUrl).hostname.replace(/^www\./, ''); } catch { /* Keep source URL. */ }
-                return <a href={feed.rssUrl} target="_blank" rel="noreferrer" key={feed.id} title={feed.sourceUrl}>
-                  <span className="saved-feed-icon">{feed.title.slice(0, 1).toUpperCase()}</span>
-                  <span><strong>{feed.title}</strong><small>{hostname} · {feed.kind === 'official' ? '官方' : feed.kind === 'search' ? '公開索引' : '生成'} · {feed.itemCount} 篇</small></span>
-                  <b>↗</b>
-                </a>;
+                return <div className="saved-feed-row" key={feed.id}>
+                  <a href={feed.rssUrl} target="_blank" rel="noreferrer" title={feed.sourceUrl}>
+                    <span className="saved-feed-icon">{feed.title.slice(0, 1).toUpperCase()}</span>
+                    <span><strong>{feed.title}</strong><small>{hostname} · {feed.kind === 'official' ? '官方' : feed.kind === 'search' ? '公開索引' : '生成'} · {feed.itemCount} 篇</small></span>
+                    <b>↗</b>
+                  </a>
+                  <button type="button" className="delete-feed" disabled={deletingFeedId === feed.id} onClick={() => void removeFeed(feed)} aria-label={`刪除 ${feed.title}`} title="刪除 RSS">{deletingFeedId === feed.id ? '…' : '×'}</button>
+                </div>;
               })}</div>
             ) : <p className="saved-feeds-empty">尚未建立 RSS</p>}
           </section>

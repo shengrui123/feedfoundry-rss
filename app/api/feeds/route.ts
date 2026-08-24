@@ -1,4 +1,4 @@
-import { listFeeds, saveFeed, saveNewFeedItems } from '../../../db';
+import { deleteFeed, listFeeds, saveFeed, saveNewFeedItems } from '../../../db';
 import { assertPublicUrl, resolveWebsite } from '../../../lib/rss';
 
 async function feedId(sourceUrl: string): Promise<string> {
@@ -64,5 +64,21 @@ export async function POST(request: Request) {
     return Response.json({ title, rssUrl: `${origin}/feeds/${id}.xml`, sourceUrl: resolved.sourceUrl, kind: 'generated', itemCount: articles.length });
   } catch (cause) {
     return Response.json({ error: cause instanceof Error ? cause.message : '無法建立 RSS' }, { status: 400 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const expectedToken = process.env.FEED_DELETE_TOKEN;
+    if (!expectedToken) return Response.json({ error: '刪除功能尚未設定密碼' }, { status: 503 });
+    const providedToken = request.headers.get('x-feed-delete-token');
+    if (!providedToken || providedToken !== expectedToken) return Response.json({ error: '刪除密碼不正確' }, { status: 401 });
+    const id = new URL(request.url).searchParams.get('id') || '';
+    if (!/^[a-f0-9]{20}$/.test(id)) throw new Error('Feed ID 不正確');
+    const deleted = await deleteFeed(id);
+    if (!deleted) return Response.json({ error: '找不到這個 RSS' }, { status: 404 });
+    return Response.json({ deleted: true });
+  } catch (cause) {
+    return Response.json({ error: cause instanceof Error ? cause.message : '無法刪除 RSS' }, { status: 400 });
   }
 }

@@ -65,6 +65,14 @@ export async function touchFeed(id: string) {
   await sql().query('UPDATE feeds SET last_accessed_at = $1 WHERE id = $2', [Date.now(), id]);
 }
 
+export async function deleteFeed(id: string): Promise<boolean> {
+  await ensureSchema();
+  const database = sql();
+  await database.query('DELETE FROM feed_items WHERE feed_id = $1', [id]);
+  const rows = await database.query('DELETE FROM feeds WHERE id = $1 RETURNING id', [id]);
+  return rows.length > 0;
+}
+
 export type FeedSummary = Pick<SavedFeed, 'id' | 'source_url' | 'title' | 'feed_kind' | 'feed_url' | 'created_at' | 'last_accessed_at'> & {
   item_count: number;
 };
