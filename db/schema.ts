@@ -36,3 +36,15 @@ export const createFeedItemsIndex = `
   CREATE INDEX IF NOT EXISTS idx_feed_items_feed_seen
   ON feed_items (feed_id, first_seen_at DESC)
 `;
+
+export const createUsersTable = `
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    password_hash TEXT NOT NULL,
+    password_salt TEXT NOT NULL,
+    password_iterations INTEGER NOT NULL,
+    created_at BIGINT NOT NULL
+  )
+`;

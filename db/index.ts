@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable, upgradeFeedsTable } from './schema';
+import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable, createUsersTable, upgradeFeedsTable } from './schema';
 
 export type SavedFeed = {
   id: string;
@@ -30,11 +30,39 @@ async function ensureSchema() {
     for (const statement of upgradeFeedsTable) await database.query(statement);
     await database.query(createFeedItemsTable);
     await database.query(createFeedItemsIndex);
+    await database.query(createUsersTable);
   })().catch((error) => {
     schemaReady = null;
     throw error;
   });
   await schemaReady;
+}
+
+export type AccountUser = {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  password_salt: string;
+  password_iterations: number;
+  created_at: number;
+};
+
+export async function getUserByEmail(email: string): Promise<AccountUser | null> {
+  await ensureSchema();
+  const rows = await sql().query('SELECT * FROM users WHERE email = $1 LIMIT 1', [email]) as AccountUser[];
+  return rows[0] || null;
+}
+
+export async function createUser(input: Omit<AccountUser, 'created_at'>): Promise<AccountUser> {
+  await ensureSchema();
+  const createdAt = Date.now();
+  const rows = await sql().query(`
+    INSERT INTO users (id, email, name, password_hash, password_salt, password_iterations, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *
+  `, [input.id, input.email, input.name, input.password_hash, input.password_salt, input.password_iterations, createdAt]) as AccountUser[];
+  return rows[0];
 }
 
 export async function saveFeed(input: Omit<SavedFeed, 'created_at' | 'last_accessed_at'>) {

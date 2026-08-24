@@ -48,7 +48,7 @@ export default function AllFeedsPage() {
       const data = await response.json() as { error?: string };
       if (response.status === 401) window.sessionStorage.removeItem('feed-delete-token');
       if (!response.ok) throw new Error(data.error || '無法刪除 RSS');
-      setFeeds((current) => current.filter((item) => item.id !== feed.id));
+      await loadFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法刪除 RSS'); }
     finally { setDeletingId(null); }
   }
