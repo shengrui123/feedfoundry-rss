@@ -55,7 +55,7 @@ export default function AllFeedsPage() {
     </header>
     <section className="feeds-library">
       <Link className="back-home" href="/">← 返回首頁</Link>
-      <div className="library-head"><div><span className="kicker">RSS LIBRARY</span><h1>全部 RSS</h1><p>管理已保存的官方、公開索引與自動生成 RSS。</p></div><Link href="/">＋ 建立新 Feed</Link></div>
+      <div className="library-head"><div><span className="kicker">RSS LIBRARY</span><h1>全部 RSS</h1><p>僅顯示目前瀏覽器或登入帳號保存的 RSS。</p></div><Link href="/">＋ 建立新 Feed</Link></div>
       {loading ? <div className="library-empty">正在載入…</div> : feeds.length ? <div className="feed-grid">{feeds.map((feed) => {
         let hostname = feed.sourceUrl;
         try { hostname = new URL(feed.sourceUrl).hostname.replace(/^www\./, ''); } catch { /* Keep source URL. */ }

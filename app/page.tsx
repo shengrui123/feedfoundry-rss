@@ -102,6 +102,7 @@ export default function Home() {
           <div className="rail-help"><strong>如何運作？</strong><p>優先返回官方 RSS。只有找不到官方來源時，才根據頁面文章結構建立新的 Feed。</p></div>
           <section className="saved-feeds" aria-labelledby="saved-feeds-title">
             <div className="saved-feeds-head"><p className="rail-label" id="saved-feeds-title">我的 RSS</p><Link href="/feeds">顯示全部</Link><span>{savedFeeds.length}</span></div>
+            <p className="saved-feeds-scope">僅自己可見 · 登入後自動同步</p>
             {feedsLoading ? <p className="saved-feeds-empty">正在載入…</p> : savedFeeds.length ? (
               <div className="saved-feeds-list">{savedFeeds.map((feed) => {
                 let hostname = feed.sourceUrl;
