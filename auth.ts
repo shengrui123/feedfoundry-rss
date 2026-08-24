@@ -36,4 +36,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   secret: process.env.AUTH_SECRET,
   trustHost: true,
+  callbacks: {
+    jwt({ token, user }) {
+      if (user?.id) token.userId = user.id;
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user) (session.user as typeof session.user & { id: string }).id = String(token.userId || token.sub || '');
+      return session;
+    },
+  },
 });

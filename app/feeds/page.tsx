@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AuthControls from '../auth-controls';
+import { feedOwnerHeaders, markFeedOwnerReady } from '../../lib/feed-owner-client';
 
 type SavedFeed = { id: string; title: string; sourceUrl: string; rssUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
 
@@ -15,9 +16,10 @@ export default function AllFeedsPage() {
 
   const loadFeeds = useCallback(async () => {
     try {
-      const response = await fetch('/api/feeds', { cache: 'no-store' });
+      const response = await fetch('/api/feeds', { cache: 'no-store', headers: feedOwnerHeaders() });
       const data = await response.json() as { feeds?: SavedFeed[]; error?: string };
       if (!response.ok) throw new Error(data.error || '無法載入 RSS');
+      markFeedOwnerReady();
       setFeeds(data.feeds || []);
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法載入 RSS'); }
     finally { setLoading(false); }
@@ -36,17 +38,10 @@ export default function AllFeedsPage() {
 
   async function remove(feed: SavedFeed) {
     if (!window.confirm(`確定要刪除「${feed.title}」嗎？${feed.kind === 'generated' ? '\n已保存的文章也會一併刪除。' : ''}`)) return;
-    let token = window.sessionStorage.getItem('feed-delete-token') || '';
-    if (!token) {
-      token = window.prompt('請輸入刪除密碼')?.trim() || '';
-      if (!token) return;
-      window.sessionStorage.setItem('feed-delete-token', token);
-    }
     setDeletingId(feed.id); setError('');
     try {
-      const response = await fetch(`/api/feeds?id=${encodeURIComponent(feed.id)}`, { method: 'DELETE', headers: { 'x-feed-delete-token': token } });
+      const response = await fetch(`/api/feeds?id=${encodeURIComponent(feed.id)}`, { method: 'DELETE', headers: feedOwnerHeaders() });
       const data = await response.json() as { error?: string };
-      if (response.status === 401) window.sessionStorage.removeItem('feed-delete-token');
       if (!response.ok) throw new Error(data.error || '無法刪除 RSS');
       await loadFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法刪除 RSS'); }

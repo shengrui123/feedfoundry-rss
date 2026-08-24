@@ -9,6 +9,7 @@ export const createFeedsTable = `
     feed_kind TEXT NOT NULL DEFAULT 'generated',
     feed_url TEXT NOT NULL DEFAULT '',
     item_count INTEGER NOT NULL DEFAULT 0,
+    owner_key TEXT NOT NULL DEFAULT 'legacy',
     created_at BIGINT NOT NULL,
     last_accessed_at BIGINT NOT NULL
   )
@@ -18,7 +19,13 @@ export const upgradeFeedsTable = [
   `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS feed_kind TEXT NOT NULL DEFAULT 'generated'`,
   `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS feed_url TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS item_count INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE feeds ADD COLUMN IF NOT EXISTS owner_key TEXT NOT NULL DEFAULT 'legacy'`,
 ];
+
+export const createFeedsOwnerIndex = `
+  CREATE INDEX IF NOT EXISTS idx_feeds_owner_accessed
+  ON feeds (owner_key, last_accessed_at DESC)
+`;
 
 export const createFeedItemsTable = `
   CREATE TABLE IF NOT EXISTS feed_items (

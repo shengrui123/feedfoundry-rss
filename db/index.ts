@@ -1,5 +1,5 @@
 import { neon } from '@neondatabase/serverless';
-import { createFeedItemsIndex, createFeedItemsTable, createFeedsTable, createUsersTable, upgradeFeedsTable } from './schema';
+import { createFeedItemsIndex, createFeedItemsTable, createFeedsOwnerIndex, createFeedsTable, createUsersTable, upgradeFeedsTable } from './schema';
 
 export type SavedFeed = {
   id: string;
@@ -11,6 +11,7 @@ export type SavedFeed = {
   feed_kind: 'official' | 'search' | 'generated';
   feed_url: string;
   item_count: number;
+  owner_key: string;
   created_at: number;
   last_accessed_at: number;
 };
@@ -28,6 +29,7 @@ async function ensureSchema() {
     const database = sql();
     await database.query(createFeedsTable);
     for (const statement of upgradeFeedsTable) await database.query(statement);
+    await database.query(createFeedsOwnerIndex);
     await database.query(createFeedItemsTable);
     await database.query(createFeedItemsIndex);
     await database.query(createUsersTable);
@@ -69,8 +71,8 @@ export async function saveFeed(input: Omit<SavedFeed, 'created_at' | 'last_acces
   await ensureSchema();
   const now = Date.now();
   await sql().query(`
-    INSERT INTO feeds (id, source_url, title, max_items, include_descriptions, exclude_words, feed_kind, feed_url, item_count, created_at, last_accessed_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    INSERT INTO feeds (id, source_url, title, max_items, include_descriptions, exclude_words, feed_kind, feed_url, item_count, owner_key, created_at, last_accessed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     ON CONFLICT(id) DO UPDATE SET
       title = EXCLUDED.title,
       max_items = EXCLUDED.max_items,
@@ -79,8 +81,9 @@ export async function saveFeed(input: Omit<SavedFeed, 'created_at' | 'last_acces
       feed_kind = EXCLUDED.feed_kind,
       feed_url = EXCLUDED.feed_url,
       item_count = EXCLUDED.item_count,
+      owner_key = EXCLUDED.owner_key,
       last_accessed_at = EXCLUDED.last_accessed_at
-  `, [input.id, input.source_url, input.title, input.max_items, input.include_descriptions, input.exclude_words, input.feed_kind, input.feed_url, input.item_count, now, now]);
+  `, [input.id, input.source_url, input.title, input.max_items, input.include_descriptions, input.exclude_words, input.feed_kind, input.feed_url, input.item_count, input.owner_key, now, now]);
 }
 
 export async function getFeed(id: string): Promise<SavedFeed | null> {
@@ -93,19 +96,33 @@ export async function touchFeed(id: string) {
   await sql().query('UPDATE feeds SET last_accessed_at = $1 WHERE id = $2', [Date.now(), id]);
 }
 
-export async function deleteFeed(id: string): Promise<boolean> {
+export async function deleteFeed(id: string, ownerKey: string): Promise<boolean> {
   await ensureSchema();
   const database = sql();
+  const rows = await database.query('DELETE FROM feeds WHERE id = $1 AND owner_key = $2 RETURNING id', [id, ownerKey]);
+  if (!rows.length) return false;
   await database.query('DELETE FROM feed_items WHERE feed_id = $1', [id]);
-  const rows = await database.query('DELETE FROM feeds WHERE id = $1 RETURNING id', [id]);
-  return rows.length > 0;
+  return true;
+}
+
+export async function claimFeeds(fromOwnerKey: string, toOwnerKey: string): Promise<number> {
+  await ensureSchema();
+  if (fromOwnerKey === toOwnerKey) return 0;
+  const rows = await sql().query('UPDATE feeds SET owner_key = $1 WHERE owner_key = $2 RETURNING id', [toOwnerKey, fromOwnerKey]);
+  return rows.length;
+}
+
+export async function claimLegacyFeeds(ownerKey: string): Promise<number> {
+  await ensureSchema();
+  const rows = await sql().query("UPDATE feeds SET owner_key = $1 WHERE owner_key = 'legacy' RETURNING id", [ownerKey]);
+  return rows.length;
 }
 
 export type FeedSummary = Pick<SavedFeed, 'id' | 'source_url' | 'title' | 'feed_kind' | 'feed_url' | 'created_at' | 'last_accessed_at'> & {
   item_count: number;
 };
 
-export async function listFeeds(): Promise<FeedSummary[]> {
+export async function listFeeds(ownerKey: string): Promise<FeedSummary[]> {
   await ensureSchema();
   return await sql().query(`
     SELECT feeds.id, feeds.source_url, feeds.title, feeds.feed_kind, feeds.feed_url,
@@ -116,9 +133,10 @@ export async function listFeeds(): Promise<FeedSummary[]> {
            END AS item_count
     FROM feeds
     LEFT JOIN feed_items ON feed_items.feed_id = feeds.id
+    WHERE feeds.owner_key = $1
     GROUP BY feeds.id
     ORDER BY feeds.last_accessed_at DESC, feeds.created_at DESC
-  `) as FeedSummary[];
+  `, [ownerKey]) as FeedSummary[];
 }
 
 type FeedItemInput = { title: string; url: string; description?: string; date?: string };

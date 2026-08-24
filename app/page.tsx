@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AuthControls from './auth-controls';
+import { feedOwnerHeaders, markFeedOwnerReady } from '../lib/feed-owner-client';
 
 type Article = { title: string; url: string; description?: string; date?: string };
 type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
@@ -25,9 +26,9 @@ export default function Home() {
 
   const loadSavedFeeds = useCallback(async () => {
     try {
-      const response = await fetch('/api/feeds', { cache: 'no-store' });
+      const response = await fetch('/api/feeds', { cache: 'no-store', headers: feedOwnerHeaders() });
       const data = await response.json() as { feeds?: SavedFeedSummary[] };
-      if (response.ok) setSavedFeeds(data.feeds || []);
+      if (response.ok) { markFeedOwnerReady(); setSavedFeeds(data.feeds || []); }
     } finally { setFeedsLoading(false); }
   }, []);
 
@@ -48,9 +49,10 @@ export default function Home() {
     if (!analysis) return;
     setError(''); setLoading('create');
     try {
-      const response = await fetch('/api/feeds', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceUrl: analysis.sourceUrl, title: feedTitle, includeDescriptions, excludeWords }) });
+      const response = await fetch('/api/feeds', { method: 'POST', headers: { ...feedOwnerHeaders(), 'content-type': 'application/json' }, body: JSON.stringify({ sourceUrl: analysis.sourceUrl, title: feedTitle, includeDescriptions, excludeWords }) });
       const data = await response.json() as Result & { error?: string };
       if (!response.ok) throw new Error(data.error || '無法建立 Feed');
+      markFeedOwnerReady();
       setResult(data);
       await loadSavedFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法建立 Feed'); }
@@ -65,17 +67,10 @@ export default function Home() {
 
   async function removeFeed(feed: SavedFeedSummary) {
     if (!window.confirm(`確定要刪除「${feed.title}」嗎？${feed.kind === 'generated' ? '\n已保存的文章也會一併刪除。' : ''}`)) return;
-    let deleteToken = window.sessionStorage.getItem('feed-delete-token') || '';
-    if (!deleteToken) {
-      deleteToken = window.prompt('請輸入刪除密碼')?.trim() || '';
-      if (!deleteToken) return;
-      window.sessionStorage.setItem('feed-delete-token', deleteToken);
-    }
     setError(''); setDeletingFeedId(feed.id);
     try {
-      const response = await fetch(`/api/feeds?id=${encodeURIComponent(feed.id)}`, { method: 'DELETE', headers: { 'x-feed-delete-token': deleteToken } });
+      const response = await fetch(`/api/feeds?id=${encodeURIComponent(feed.id)}`, { method: 'DELETE', headers: feedOwnerHeaders() });
       const data = await response.json() as { deleted?: boolean; error?: string };
-      if (response.status === 401) window.sessionStorage.removeItem('feed-delete-token');
       if (!response.ok) throw new Error(data.error || '無法刪除 RSS');
       await loadSavedFeeds();
     } catch (cause) { setError(cause instanceof Error ? cause.message : '無法刪除 RSS'); }
