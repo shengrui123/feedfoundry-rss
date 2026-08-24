@@ -3,13 +3,6 @@
 import { FormEvent, useState } from 'react';
 import { authClient } from '../lib/auth-client';
 
-type ProviderId = 'github' | 'google' | 'apple';
-const providerLabels: Array<{ id: ProviderId; label: string; icon: string }> = [
-  { id: 'github', label: 'GitHub', icon: 'GH' },
-  { id: 'google', label: 'Google', icon: 'G' },
-  { id: 'apple', label: 'Apple', icon: '' },
-];
-
 export default function AuthControls() {
   const { data: session, isPending } = authClient.useSession();
   const [open, setOpen] = useState(false);
@@ -79,15 +72,6 @@ export default function AuthControls() {
           <button className="email-auth-submit" type="submit" disabled={submitting}>{submitting ? '請稍候…' : mode === 'login' ? '使用郵箱登入' : '註冊並登入'}</button>
         </form>
         <button className="auth-switch" type="button" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? '還沒有帳號？立即註冊' : '已經有帳號？直接登入'}</button>
-        <div className="auth-divider"><span>或使用其他帳號</span></div>
-        <div className="provider-list">{providerLabels.map((provider) => {
-          return <button key={provider.id} type="button" onClick={() => void authClient.signIn.social({ provider: provider.id, callbackURL: window.location.href }).then((result) => {
-            if (result.error) setError(`${provider.label} 登入尚未配置或暫時無法使用`);
-          })}>
-            <b>{provider.icon}</b><span>使用 {provider.label} 繼續</span>
-          </button>;
-        })}</div>
-        <div className="auth-notice">GitHub、Google、Apple 入口需要對應的 OAuth 憑證。</div>
       </section>
     </div>}
   </>;
