@@ -3,6 +3,7 @@ const COMMON_FEED_PATHS = ['/feed', '/feed/', '/rss', '/rss/', '/rss.xml', '/fee
 
 export type Article = { title: string; url: string; description?: string; date?: string };
 export type FeedInfo = { title: string; itemCount: number; url: string };
+export type ResolvedFeed = FeedInfo & { kind: 'official' | 'search' };
 export type SourcePage = { text: string; url: string; contentType: string; kind: 'html' | 'sitemap' };
 
 export function assertPublicUrl(value: unknown): URL {
@@ -42,7 +43,15 @@ async function readLimited(response: Response): Promise<string> {
 export async function safeFetch(input: string, accept = 'text/html,application/xhtml+xml'): Promise<{ text: string; url: string; contentType: string }> {
   let url = assertPublicUrl(input);
   for (let redirect = 0; redirect <= 5; redirect += 1) {
-    const response = await fetch(url, { redirect: 'manual', headers: { accept, 'user-agent': 'FeedFoundry/1.0 (+RSS generator)' } });
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(12_000),
+      headers: {
+        accept,
+        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.7',
+        'user-agent': 'FeedFoundry/1.0 (+RSS generator)',
+      },
+    });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       if (!location) throw new Error('來源重新導向無效');
@@ -121,7 +130,7 @@ export function inspectFeed(xml: string, url = ''): FeedInfo | null {
   return { title: decodeEntities(title), itemCount: valid.length, url };
 }
 
-export async function findOfficialFeed(html: string, pageUrl: string): Promise<FeedInfo | null> {
+export async function findOfficialFeed(html: string, pageUrl: string): Promise<ResolvedFeed | null> {
   const base = new URL(pageUrl);
   const candidates = new Set<string>();
   for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
@@ -136,10 +145,69 @@ export async function findOfficialFeed(html: string, pageUrl: string): Promise<F
     try {
       const response = await safeFetch(candidate, 'application/rss+xml,application/atom+xml,application/xml,text/xml');
       const info = inspectFeed(response.text, response.url);
-      if (info) return info;
+      if (info) return { ...info, kind: 'official' };
     } catch { /* Try the next declared candidate. */ }
   }
   return null;
+}
+
+export async function findSearchFeed(pageUrl: string): Promise<ResolvedFeed | null> {
+  const source = assertPublicUrl(pageUrl);
+  const feedUrl = new URL('/rss/search', 'https://news.google.com');
+  feedUrl.searchParams.set('q', `site:${source.hostname}`);
+  feedUrl.searchParams.set('hl', 'zh-CN');
+  feedUrl.searchParams.set('gl', 'CN');
+  feedUrl.searchParams.set('ceid', 'CN:zh-Hans');
+  try {
+    const response = await safeFetch(feedUrl.href, 'application/rss+xml,application/xml,text/xml');
+    const info = inspectFeed(response.text, response.url);
+    if (!info) return null;
+    const sourceName = decodeEntities(xmlText(response.text.match(/<source\b[^>]*>([\s\S]*?)<\/source>/i)?.[1] || ''));
+    return {
+      title: sourceName || `${source.hostname.replace(/^www\./, '')} 新聞`,
+      itemCount: info.itemCount,
+      url: response.url,
+      kind: 'search',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveWebsite(input: string): Promise<{ sourceUrl: string; title: string; feed: ResolvedFeed | null; articles: Article[] }> {
+  const source = assertPublicUrl(input);
+  let page: SourcePage | null = null;
+  let pageError: unknown;
+  try {
+    page = await fetchSource(source.href);
+  } catch (cause) {
+    pageError = cause;
+  }
+
+  if (page) {
+    const feed = page.kind === 'html' ? await findOfficialFeed(page.text, page.url) : null;
+    const articles = feed ? [] : extractArticles(page.text, page.url);
+    if (feed || articles.length) {
+      return { sourceUrl: page.url, title: pageTitle(page.text, page.url), feed, articles };
+    }
+  }
+
+  // Feed discovery must not depend on the homepage being readable. Anti-bot systems
+  // commonly block HTML while leaving a site's public RSS endpoints available.
+  const official = await findOfficialFeed('', source.href);
+  if (official) return { sourceUrl: source.href, title: official.title, feed: official, articles: [] };
+
+  // A domain-scoped public news feed is the final generic fallback for sites whose
+  // HTML and own feeds cannot be fetched from a server environment.
+  const search = await findSearchFeed(source.href);
+  if (search) return { sourceUrl: source.href, title: search.title, feed: search, articles: [] };
+
+  if (pageError instanceof Error) {
+    const match = pageError.message.match(/HTTP (401|403|429)/);
+    if (match) throw new Error(`來源網站拒絕自動讀取（HTTP ${match[1]}），且找不到可用的官方或公開替代 Feed`);
+    throw pageError;
+  }
+  throw new Error('找不到官方 RSS，頁面內也沒有可辨識的文章');
 }
 
 function addArticle(items: Map<string, Article>, pageUrl: URL, article: Article) {

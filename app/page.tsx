@@ -3,8 +3,8 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 
 type Article = { title: string; url: string; description?: string; date?: string };
-type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number }; articles: Article[]; totalDetected: number };
-type Result = { title: string; rssUrl: string; sourceUrl: string; kind: 'official' | 'generated'; itemCount: number };
+type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
+type Result = { title: string; rssUrl: string; sourceUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
 type SavedFeedSummary = { id: string; title: string; sourceUrl: string; rssUrl: string; itemCount: number };
 
 export default function Home() {
@@ -120,7 +120,7 @@ export default function Home() {
                 <div className="source-head"><div className="site-icon">{analysis.title.slice(0, 1).toUpperCase()}</div><div><span>來源網站</span><h1>{analysis.title}</h1><a href={analysis.sourceUrl} target="_blank" rel="noreferrer">{analysis.sourceUrl}</a></div></div>
 
                 {analysis.official ? (
-                  <div className="official-card"><span className="official-icon">✓</span><div><b>找到官方 RSS</b><h2>{analysis.official.title}</h2><p>已下載並解析驗證，共 {analysis.official.itemCount} 篇文章。將直接使用官方來源，不重複生成。</p></div></div>
+                  <div className="official-card"><span className="official-icon">✓</span><div><b>{analysis.official.kind === 'official' ? '找到官方 RSS' : '已啟用公開替代來源'}</b><h2>{analysis.official.title}</h2><p>{analysis.official.kind === 'official' ? '已下載並解析驗證' : '來源網站拒絕伺服器自動讀取，已改用按網域篩選的公開新聞 RSS'}，共 {analysis.official.itemCount} 篇文章。</p></div></div>
                 ) : (
                   <>
                     <div className="match-head"><div><span className="pulse" /> 自動模式</div><b>找到 {analysis.totalDetected} 篇匹配文章</b></div>
@@ -133,13 +133,13 @@ export default function Home() {
 
               <aside className="settings">
                 <span className="kicker">FEED SETTINGS</span>
-                <h2>{analysis.official ? '確認官方來源' : '設定輸出內容'}</h2>
+                <h2>{analysis.official ? (analysis.official.kind === 'official' ? '確認官方來源' : '確認公開替代來源') : '設定輸出內容'}</h2>
                 {!analysis.official && <>
                   <label>Feed 名稱<input value={feedTitle} onChange={(event) => setFeedTitle(event.target.value)} maxLength={120} /></label>
                   <label>排除標題關鍵字<textarea value={excludeWords} onChange={(event) => setExcludeWords(event.target.value)} placeholder="廣告, 贊助, 直播" rows={3} /></label>
                   <label className="switch"><input type="checkbox" checked={includeDescriptions} onChange={(event) => setIncludeDescriptions(event.target.checked)} /><span />包含文章摘要</label>
                 </>}
-                <button className="create-button" onClick={createFeed} disabled={loading === 'create'}>{loading === 'create' ? '正在建立…' : analysis.official ? '確認使用官方 RSS' : '建立 RSS Feed'} <b>→</b></button>
+                <button className="create-button" onClick={createFeed} disabled={loading === 'create'}>{loading === 'create' ? '正在建立…' : analysis.official ? (analysis.official.kind === 'official' ? '確認使用官方 RSS' : '確認使用公開 RSS') : '建立 RSS Feed'} <b>→</b></button>
                 <p className="settings-note">建立前會再次抓取來源並驗證，失敗時不會產生空白 Feed。</p>
               </aside>
             </div>
@@ -147,10 +147,10 @@ export default function Home() {
 
           {result && (
             <div className="success-panel">
-              <div className="success-mark">✓</div><span className="kicker">FEED READY</span><h1>你的 RSS 已經可以訂閱。</h1><p>{result.kind === 'official' ? '此網站提供了有效的官方 RSS，我們直接保留原始來源。' : '設定已保存。每次閱讀器存取時都會檢查來源，只追加新文章，既有項目會繼續保留。'}</p>
+              <div className="success-mark">✓</div><span className="kicker">FEED READY</span><h1>你的 RSS 已經可以訂閱。</h1><p>{result.kind === 'official' ? '此網站提供了有效的官方 RSS，我們直接保留原始來源。' : result.kind === 'search' ? '來源網站限制自動讀取，這是按該網域篩選的公開新聞 RSS。' : '設定已保存。每次閱讀器存取時都會檢查來源，只追加新文章，既有項目會繼續保留。'}</p>
               <div className="feed-output"><label>RSS FEED URL</label><div><input readOnly value={result.rssUrl} onFocus={(event) => event.currentTarget.select()} /><button onClick={copyFeed} type="button">{copied ? '已複製 ✓' : '複製連結'}</button></div></div>
               <div className="success-actions"><a href={result.rssUrl} target="_blank" rel="noreferrer">打開 XML ↗</a><button type="button" onClick={reset}>＋ 建立另一個 Feed</button></div>
-              <div className="feed-facts"><span><b>固定</b>RSS 連結</span><span><b>{result.kind === 'official' ? '官方' : '即時'}</b>來源更新</span><span><b>RSS 2.0</b>輸出格式</span></div>
+              <div className="feed-facts"><span><b>固定</b>RSS 連結</span><span><b>{result.kind === 'official' ? '官方' : result.kind === 'search' ? '公開索引' : '即時'}</b>來源更新</span><span><b>RSS 2.0</b>輸出格式</span></div>
             </div>
           )}
           {error && <div className="error-toast" role="alert"><b>無法完成</b><span>{error}</span><button type="button" onClick={() => setError('')}>×</button></div>}
