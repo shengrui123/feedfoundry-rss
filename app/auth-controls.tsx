@@ -1,7 +1,7 @@
 'use client';
 
-import { getProviders, signIn, signOut, useSession } from 'next-auth/react';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useState } from 'react';
+import { authClient } from '../lib/auth-client';
 
 type ProviderId = 'github' | 'google' | 'apple';
 const providerLabels: Array<{ id: ProviderId; label: string; icon: string }> = [
@@ -11,19 +11,14 @@ const providerLabels: Array<{ id: ProviderId; label: string; icon: string }> = [
 ];
 
 export default function AuthControls() {
-  const { data: session, status } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [enabled, setEnabled] = useState<Set<string>>(new Set());
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    void getProviders().then((providers) => setEnabled(new Set(Object.keys(providers || {}))));
-  }, []);
 
   function show(nextMode: 'login' | 'register') {
     setMode(nextMode); setError(''); setOpen(true);
@@ -37,16 +32,16 @@ export default function AuthControls() {
     event.preventDefault(); setError(''); setSubmitting(true);
     try {
       if (mode === 'register') {
-        const response = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ name, email, password }),
+        const result = await authClient.signUp.email({
+          name: name.trim() || email.split('@')[0] || 'User',
+          email,
+          password,
         });
-        const data = await response.json() as { error?: string };
-        if (!response.ok) throw new Error(data.error || '無法建立帳號');
+        if (result.error) throw new Error(result.error.message || '無法建立帳號');
+      } else {
+        const result = await authClient.signIn.email({ email, password });
+        if (result.error) throw new Error('電子郵箱或密碼不正確');
       }
-      const result = await signIn('credentials', { email, password, redirect: false });
-      if (!result || result.error) throw new Error(mode === 'login' ? '電子郵箱或密碼不正確' : '帳號已建立，但登入失敗，請再試一次');
       window.location.reload();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '暫時無法登入');
@@ -54,13 +49,15 @@ export default function AuthControls() {
     }
   }
 
-  if (status === 'authenticated') {
+  if (session) {
     return <div className="account-control">
       <span className={session.user?.image ? 'with-image' : ''} style={session.user?.image ? { backgroundImage: `url(${session.user.image})` } : undefined}>{session.user?.image ? '' : (session.user?.name || session.user?.email || '用').slice(0, 1)}</span>
       <strong>{session.user?.name || session.user?.email || '已登入'}</strong>
-      <button type="button" onClick={() => void signOut({ callbackUrl: '/' })}>登出</button>
+      <button type="button" onClick={() => void authClient.signOut().then(() => { window.location.href = '/'; })}>登出</button>
     </div>;
   }
+
+  if (isPending) return <div className="auth-entry" aria-busy="true" />;
 
   return <>
     <div className="auth-entry">
@@ -84,12 +81,13 @@ export default function AuthControls() {
         <button className="auth-switch" type="button" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? '還沒有帳號？立即註冊' : '已經有帳號？直接登入'}</button>
         <div className="auth-divider"><span>或使用其他帳號</span></div>
         <div className="provider-list">{providerLabels.map((provider) => {
-          const available = enabled.has(provider.id);
-          return <button key={provider.id} type="button" disabled={!available} onClick={() => void signIn(provider.id, { callbackUrl: window.location.href })}>
-            <b>{provider.icon}</b><span>使用 {provider.label} 繼續</span>{!available && <small>待配置</small>}
+          return <button key={provider.id} type="button" onClick={() => void authClient.signIn.social({ provider: provider.id, callbackURL: window.location.href }).then((result) => {
+            if (result.error) setError(`${provider.label} 登入尚未配置或暫時無法使用`);
+          })}>
+            <b>{provider.icon}</b><span>使用 {provider.label} 繼續</span>
           </button>;
         })}</div>
-        {!providerLabels.some((provider) => enabled.has(provider.id)) && <div className="auth-notice">GitHub、Google、Apple 憑證完成配置後，這些入口會自動啟用。</div>}
+        <div className="auth-notice">GitHub、Google、Apple 入口需要對應的 OAuth 憑證。</div>
       </section>
     </div>}
   </>;
