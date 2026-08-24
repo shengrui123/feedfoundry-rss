@@ -59,6 +59,7 @@ export default function AllFeedsPage() {
       <div className="top-actions"><AuthControls /><div className="top-status"><i /> Feed engine online</div></div>
     </header>
     <section className="feeds-library">
+      <Link className="back-home" href="/">← 返回首頁</Link>
       <div className="library-head"><div><span className="kicker">RSS LIBRARY</span><h1>全部 RSS</h1><p>管理已保存的官方、公開索引與自動生成 RSS。</p></div><Link href="/">＋ 建立新 Feed</Link></div>
       {loading ? <div className="library-empty">正在載入…</div> : feeds.length ? <div className="feed-grid">{feeds.map((feed) => {
         let hostname = feed.sourceUrl;
