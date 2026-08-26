@@ -155,6 +155,19 @@ export async function findOfficialFeed(html: string, pageUrl: string): Promise<R
       try { candidates.add(new URL(href, base).href); } catch { /* ignore */ }
     }
   }
+  for (const match of html.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/gi)) {
+    const tag = match[0];
+    const href = attr(tag, 'href');
+    const label = stripHtml(tag);
+    if (href && (/(?:rss|atom|feed)/i.test(href) || /(?:\bRSS\b|flux RSS|RSS 訂閱|訂閱 RSS)/i.test(label))) {
+      try { candidates.add(new URL(href, base).href); } catch { /* ignore */ }
+    }
+  }
+  if (base.hostname === 'afp.com' || base.hostname.endsWith('.afp.com')) {
+    const language = base.pathname.match(/^\/([a-z]{2})(?:\/|$)/i)?.[1]?.toLowerCase() || 'fr';
+    candidates.add(new URL(`/${language}/actus/afp_actualite/792%2C31%2C9%2C7%2C33/feed`, base.origin).href);
+    candidates.add(new URL(`/${language}/actus/afp_communique/all/feed`, base.origin).href);
+  }
   for (const path of COMMON_FEED_PATHS) candidates.add(new URL(path, base.origin).href);
   for (const candidate of [...candidates].slice(0, 16)) {
     try {
