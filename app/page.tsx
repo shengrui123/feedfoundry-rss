@@ -6,7 +6,7 @@ import AuthControls from './auth-controls';
 import { feedOwnerHeaders, markFeedOwnerReady } from '../lib/feed-owner-client';
 
 type Article = { title: string; url: string; description?: string; date?: string };
-type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
+type Analysis = { sourceUrl: string; title: string; official: null | { title: string; rssUrl: string; itemCount: number; latestItemDate: string; kind: 'official' | 'search' }; articles: Article[]; totalDetected: number };
 type Result = { title: string; rssUrl: string; sourceUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
 type SavedFeedSummary = { id: string; title: string; sourceUrl: string; rssUrl: string; kind: 'official' | 'search' | 'generated'; itemCount: number };
 
@@ -141,7 +141,7 @@ export default function Home() {
                 <div className="source-head"><div className="site-icon">{analysis.title.slice(0, 1).toUpperCase()}</div><div><span>來源網站</span><h1>{analysis.title}</h1><a href={analysis.sourceUrl} target="_blank" rel="noreferrer">{analysis.sourceUrl}</a></div></div>
 
                 {analysis.official ? (
-                  <div className="official-card"><span className="official-icon">✓</span><div><b>{analysis.official.kind === 'official' ? '找到官方 RSS' : '已啟用公開替代來源'}</b><h2>{analysis.official.title}</h2><p>{analysis.official.kind === 'official' ? '已下載並解析驗證' : '來源網站拒絕伺服器自動讀取，已改用按網域篩選的公開新聞 RSS'}，共 {analysis.official.itemCount} 篇文章。</p></div></div>
+                  <div className="official-card"><span className="official-icon">✓</span><div><b>{analysis.official.kind === 'official' ? '找到官方 RSS' : '已啟用公開替代來源'}</b><h2>{analysis.official.title}</h2><p>{analysis.official.kind === 'official' ? '已下載、解析並驗證更新時間' : '來源網站拒絕伺服器自動讀取，已改用按網域篩選的公開新聞 RSS'}；最新內容 {analysis.official.latestItemDate.slice(0, 10)}，共 {analysis.official.itemCount} 篇文章。</p></div></div>
                 ) : (
                   <>
                     <div className="match-head"><div><span className="pulse" /> 自動模式</div><b>找到 {analysis.totalDetected} 篇匹配文章</b></div>

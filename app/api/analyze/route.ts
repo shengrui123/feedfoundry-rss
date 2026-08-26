@@ -7,7 +7,7 @@ export async function POST(request: Request) {
     return Response.json({
       sourceUrl: resolved.sourceUrl,
       title: resolved.title,
-      official: resolved.feed ? { title: resolved.feed.title, rssUrl: resolved.feed.url, itemCount: resolved.feed.itemCount, kind: resolved.feed.kind } : null,
+      official: resolved.feed ? { title: resolved.feed.title, rssUrl: resolved.feed.url, itemCount: resolved.feed.itemCount, latestItemDate: resolved.feed.latestItemDate, kind: resolved.feed.kind } : null,
       articles: resolved.articles.slice(0, 12),
       totalDetected: resolved.articles.length,
     });

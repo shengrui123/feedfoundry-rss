@@ -1,8 +1,10 @@
 const MAX_BYTES = 2_000_000;
+const MAX_FEED_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+const MAX_FUTURE_DATE_MS = 7 * 24 * 60 * 60 * 1000;
 const COMMON_FEED_PATHS = ['/feed', '/feed/', '/rss', '/rss/', '/rss.xml', '/feed.xml', '/atom.xml', '/index.xml'];
 
 export type Article = { title: string; url: string; description?: string; date?: string };
-export type FeedInfo = { title: string; itemCount: number; url: string };
+export type FeedInfo = { title: string; itemCount: number; url: string; latestItemDate: string };
 export type ResolvedFeed = FeedInfo & { kind: 'official' | 'search' };
 export type SourcePage = { text: string; url: string; contentType: string; kind: 'html' | 'sitemap' };
 
@@ -115,7 +117,14 @@ function attr(tag: string, name: string): string { return decodeEntities(tag.mat
 function xmlText(value: string): string { return value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').trim(); }
 function xmlEscape(value: string): string { return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;'); }
 
-export function inspectFeed(xml: string, url = ''): FeedInfo | null {
+function itemTimestamp(block: string): number | null {
+  const value = block.match(/<(?:pubDate|published|updated|dc:date|dcterms:issued|date)\b[^>]*>([\s\S]*?)<\/(?:pubDate|published|updated|dc:date|dcterms:issued|date)>/i)?.[1];
+  if (!value) return null;
+  const timestamp = Date.parse(decodeEntities(xmlText(value)));
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function inspectFeed(xml: string, url = '', now = Date.now()): FeedInfo | null {
   if (!/<(?:rss|feed|rdf:RDF)\b/i.test(xml)) return null;
   const isAtom = /<feed\b/i.test(xml);
   const blocks = [...xml.matchAll(isAtom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi)].map((m) => m[0]);
@@ -125,9 +134,15 @@ export function inspectFeed(xml: string, url = ''): FeedInfo | null {
     return Boolean(title && link);
   });
   if (!valid.length) return null;
+  const timestamps = valid
+    .map(itemTimestamp)
+    .filter((timestamp): timestamp is number => timestamp !== null && timestamp <= now + MAX_FUTURE_DATE_MS);
+  if (!timestamps.length) return null;
+  const latestTimestamp = Math.max(...timestamps);
+  if (latestTimestamp < now - MAX_FEED_AGE_MS) return null;
   const channel = xml.match(/<(?:channel|feed)\b[\s\S]*?<\/(?:channel|feed)>/i)?.[0] || xml;
   const title = xmlText(channel.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || 'RSS 訂閱');
-  return { title: decodeEntities(title), itemCount: valid.length, url };
+  return { title: decodeEntities(title), itemCount: valid.length, url, latestItemDate: new Date(latestTimestamp).toISOString() };
 }
 
 export async function findOfficialFeed(html: string, pageUrl: string): Promise<ResolvedFeed | null> {
@@ -167,6 +182,7 @@ export async function findSearchFeed(pageUrl: string): Promise<ResolvedFeed | nu
       title: sourceName || `${source.hostname.replace(/^www\./, '')} 新聞`,
       itemCount: info.itemCount,
       url: response.url,
+      latestItemDate: info.latestItemDate,
       kind: 'search',
     };
   } catch {
