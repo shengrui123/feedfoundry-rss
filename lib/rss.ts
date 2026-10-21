@@ -124,6 +124,17 @@ function itemTimestamp(block: string): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+export function hasValidFeedStructure(xml: string): boolean {
+  if (!/<(?:rss|feed|rdf:RDF)\b/i.test(xml)) return false;
+  const isAtom = /<feed\b/i.test(xml);
+  const blocks = [...xml.matchAll(isAtom ? /<entry\b[\s\S]*?<\/entry>/gi : /<item\b[\s\S]*?<\/item>/gi)].map((match) => match[0]);
+  return blocks.some((block) => {
+    const title = block.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+    const link = isAtom ? block.match(/<link\b[^>]*href=["']([^"']+)/i)?.[1] : block.match(/<link\b[^>]*>([\s\S]*?)<\/link>/i)?.[1];
+    return Boolean(title && link);
+  });
+}
+
 export function inspectFeed(xml: string, url = '', now = Date.now()): FeedInfo | null {
   if (!/<(?:rss|feed|rdf:RDF)\b/i.test(xml)) return null;
   const isAtom = /<feed\b/i.test(xml);
